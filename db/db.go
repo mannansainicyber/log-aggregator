@@ -16,6 +16,16 @@ type Log struct {
 	Timestamp string
 }
 
+type StatRow struct {
+	Name  string
+	Count int
+}
+
+type Stats struct {
+	ByLevel   []StatRow
+	ByService []StatRow
+}
+
 func getDBPath() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".log-ag", "logs.db")
@@ -94,4 +104,65 @@ func Query(level, service, since string, limit int) ([]Log, error) {
 		logs = append(logs, l)
 	}
 	return logs, nil
+}
+
+func QueryAfter(lastID int) ([]Log, error) {
+	db, err := Connect()
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(
+		"SELECT id, level, service, message, timestamp FROM logs WHERE id > ? ORDER BY id ASC",
+		lastID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []Log
+	for rows.Next() {
+		var l Log
+		rows.Scan(&l.ID, &l.Level, &l.Service, &l.Message, &l.Timestamp)
+		logs = append(logs, l)
+	}
+	return logs, nil
+}
+
+func GetStats() (Stats, error) {
+	db, err := Connect()
+	if err != nil {
+		return Stats{}, err
+	}
+	defer db.Close()
+
+	var stats Stats
+
+	// count by level
+	rows, err := db.Query("SELECT level, COUNT(*) FROM logs GROUP BY level ORDER BY COUNT(*) DESC")
+	if err != nil {
+		return Stats{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var s StatRow
+		rows.Scan(&s.Name, &s.Count)
+		stats.ByLevel = append(stats.ByLevel, s)
+	}
+
+	// count by service
+	rows2, err := db.Query("SELECT service, COUNT(*) FROM logs GROUP BY service ORDER BY COUNT(*) DESC")
+	if err != nil {
+		return Stats{}, err
+	}
+	defer rows2.Close()
+	for rows2.Next() {
+		var s StatRow
+		rows2.Scan(&s.Name, &s.Count)
+		stats.ByService = append(stats.ByService, s)
+	}
+
+	return stats, nil
 }
