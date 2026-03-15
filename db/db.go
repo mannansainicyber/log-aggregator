@@ -166,3 +166,14 @@ func GetStats() (Stats, error) {
 
 	return stats, nil
 }
+
+func Clear() error {
+	db, err := Connect()
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec("DELETE FROM logs")
+	return err
+}
